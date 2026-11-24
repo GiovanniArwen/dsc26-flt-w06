@@ -1,8 +1,5 @@
 /// The camera permission decision logic, kept plain and testable behind
 /// [PermissionGateway] so it never has to touch a real plugin.
-///
-/// TODO(intern): implement CameraPermissionFlow. Everything else here is
-/// given.
 
 /// The states a camera permission can be in, mapped from whatever the real
 /// plugin reports. Given: do not change.
@@ -59,22 +56,43 @@ class CameraPermissionFlow {
 
   /// Called when the user taps the button that starts photo capture.
   Future<PermissionDecision> onCaptureTapped() async {
-    throw UnimplementedError('onCaptureTapped');
+    final status = await _gateway.status();
+    switch (status) {
+      case CameraPermissionState.granted:
+      case CameraPermissionState.limited:
+        return const Proceed();
+      case CameraPermissionState.restricted:
+        return const Unavailable(canAskAgain: false);
+      case CameraPermissionState.permanentlyDenied:
+        return const ShowSettingsHelp();
+      case CameraPermissionState.denied:
+        if (await _gateway.shouldShowRationale()) {
+          return const ShowRationale();
+        }
+        return _requestOnce();
+    }
   }
 
   /// Called after the user accepts the app's own rationale card.
-  Future<PermissionDecision> onRationaleAccepted() async {
-    throw UnimplementedError('onRationaleAccepted');
-  }
+  Future<PermissionDecision> onRationaleAccepted() => _requestOnce();
 
   /// Called when the user dismisses the rationale card without proceeding.
   /// Never touches the gateway.
-  Future<PermissionDecision> onRationaleDeclined() async {
-    throw UnimplementedError('onRationaleDeclined');
-  }
+  Future<PermissionDecision> onRationaleDeclined() async =>
+      const Unavailable(canAskAgain: true);
 
   /// The only method that may open the system settings screen.
-  Future<bool> onOpenSettingsTapped() {
-    throw UnimplementedError('onOpenSettingsTapped');
+  Future<bool> onOpenSettingsTapped() => _gateway.openSettings();
+
+  Future<PermissionDecision> _requestOnce() async {
+    final result = await _gateway.request();
+    return switch (result) {
+      CameraPermissionState.granted ||
+      CameraPermissionState.limited =>
+        const Proceed(),
+      CameraPermissionState.permanentlyDenied => const ShowSettingsHelp(),
+      CameraPermissionState.restricted => const Unavailable(canAskAgain: false),
+      CameraPermissionState.denied => const Unavailable(canAskAgain: true),
+    };
   }
 }

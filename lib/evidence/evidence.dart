@@ -1,9 +1,9 @@
 /// Evidence integrity: a hash of the exact bytes uploaded, and a canonical,
 /// privacy-aware metadata record.
-///
-/// TODO(intern): implement sha256Hex and EvidenceRecord.canonicalJson.
-/// GeoPoint is given.
+import 'dart:convert';
 import 'dart:typed_data';
+
+import 'package:crypto/crypto.dart';
 
 import '../capture/capture_angle.dart';
 
@@ -16,9 +16,7 @@ class GeoPoint {
 }
 
 /// The lower-case hex SHA-256 digest of [bytes].
-String sha256Hex(Uint8List bytes) {
-  throw UnimplementedError('sha256Hex');
-}
+String sha256Hex(Uint8List bytes) => sha256.convert(bytes).toString();
 
 /// One captured photo plus the facts a surveyor or a regulator needs to
 /// trust it.
@@ -45,6 +43,23 @@ class EvidenceRecord {
   /// what `jsonEncode` produces, times as UTC ISO-8601, location rounded to
   /// 3 decimal places and omitted entirely without consent or a point.
   String canonicalJson() {
-    throw UnimplementedError('EvidenceRecord.canonicalJson');
+    final point = location;
+    // Map literals keep insertion order, so this is the canonical key order.
+    final map = <String, Object>{
+      'angle': angle.name,
+      'appVersion': appVersion,
+      'capturedAt': capturedAt.toUtc().toIso8601String(),
+      'deviceModel': deviceModel,
+      if (locationConsent && point != null)
+        'location': {
+          'lat': _round3(point.lat),
+          'lng': _round3(point.lng),
+        },
+      'sha256': sha256Hex(bytes),
+      'sizeBytes': bytes.length,
+    };
+    return jsonEncode(map);
   }
+
+  static double _round3(double v) => (v * 1000).round() / 1000;
 }
